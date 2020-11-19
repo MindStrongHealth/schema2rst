@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import io
+import re
 import six
 import sys
 import unicodedata
@@ -41,17 +42,40 @@ class RestructuredTextWriter:
         else:
             self.stream = io.open(sys.stdout.fileno(), 'w', encoding='utf-8')
 
+    @staticmethod
+    def conform_name(n):
+        """Escape trailing underscores for sphinx"""
+        return re.sub(r"([_]+)$", r'\\\1', n)
+
     def close(self):
         self.stream.close()
 
     def println(self, string):
         self.stream.write(string + six.u("\n"))
 
-    def header(self, string, char="="):
+    def title(self, title, char="="):
+
         self.println("")
-        self.println(string)
-        self.println(char * string_width(string))
+        self.println(title)
+        self.println(char * string_width(title))
         self.println("")
+
+    def header(self, schema, table, comment, char="="):
+        """Table header"""
+
+        table = self.conform_name(table)
+        ref = f".. _{schema}.{table}:"
+
+        self.println("")
+        self.println(ref)
+        self.println("")
+        self.println(table)
+        self.println(char * string_width(table))
+        self.println("")
+
+        if comment != '':
+            self.println(comment)
+            self.println("")
 
     def listtable(self, header=None):
         self.println(".. list-table::")
@@ -65,6 +89,8 @@ class RestructuredTextWriter:
 
     def listtable_column(self, columns):
         for i, column in enumerate(columns):
+            if isinstance(column, str):
+                column = self.conform_name(column)
             if i == 0:
                 self.println("   * - %s" % column)
             else:

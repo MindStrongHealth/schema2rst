@@ -45,7 +45,7 @@ def main(args=sys.argv[1:]):
         schema = yaml.safe_load(open(options.datafile))
     else:
         try:
-            config = yaml.load(io.open(options.config, encoding='utf-8'))
+            config = yaml.safe_load(io.open(options.config, encoding='utf-8'))
             engine = inspectors.create_engine(config)
             schema = inspectors.create_for(engine).dump()
         finally:
@@ -54,30 +54,35 @@ def main(args=sys.argv[1:]):
     doc = RestructuredTextWriter(options.output)
     generate_doc(doc, schema)
 
-
 def generate_doc(doc, schema):
-    doc.header('Schema: %s' % schema['name'])
+    doc.title(schema['name'])
 
     for table in schema['tables']:
-        # FIXME: support fullname (table comment)
-        if table['fullname']:
-            doc.header("%s (%s)" %
-                       (table['fullname'], table['name']), '-')
-        else:
-            doc.header(table['name'], '-')
 
-        headers = ['Fullname', 'Name', 'Type', 'NOT NULL',
-                   'PKey', 'Default', 'Comment']
+        doc.header(schema['name'], table['name'], table['comment'], '-')
+
+        headers = ['Name', 'Type', 'NOT NULL',
+                   'PKey', 'Default', 'Detail', 'Comment']
         doc.listtable(headers)
 
-        for c in table['columns']:
-            columns = [c.get('fullname'), c.get('name'), c.get('type'),
+        for ix,c in enumerate(table['columns']):
+
+            detail = c.get('detail')
+            if 'FK:' in detail:
+                # make hyperlink on referenced table
+                fks = []
+                for d in detail.replace('FK: ','').split(', '):
+                    t,_ = d.split('.')
+                    fks.append(f"`{d} <#{t.replace('_','-')}>`_")
+                detail = ', '.join(fks)
+
+            columns = [c.get('name'), c.get('type'),
                        (not c.get('nullable')), c.get('primary_key'),
-                       c.get('default'), c.get('comment')]
+                       c.get('default'), detail, c.get('comment')]
             doc.listtable_column(columns)
 
         if table['indexes']:
-            doc.header('Keys', '^')
+            doc.title('Keys', '^')
             for index in table['indexes']:
                 if index['unique']:
                     format = "UNIQUE KEY: %s (%s)"
@@ -87,3 +92,4 @@ def generate_doc(doc, schema):
                 string = format % (index['name'],
                                    ', '.join(index['column_names']))
                 doc.list_item(string)
+

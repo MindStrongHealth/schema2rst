@@ -81,20 +81,38 @@ class SimpleInspector(Inspector):
 
         return columns
 
+
     def dump(self):
         ret = dict(name=self.engine.url.database, tables=[])
         for table in self.get_tables():
             table_name = table['name']
 
+            # rename table 'fullname' to 'comment'
+            table['comment'] = table['fullname']
+            table.pop('fullname',None)
+
             table['columns'] = []
+            col_map = {}
             for column in self.get_columns(table_name):
-                metadata = dict(fullname=column['fullname'],
+                if column['fullname'] == column['name']:
+                    comment = ''
+                else:
+                    comment = column['fullname']
+
+                detail = column['comment']
+                if 'FK' not in detail and 'auto_increment' not in detail:
+                    detail = ''
+                elif 'FK' in detail:
+                    # potentially remove collation string
+                    detail = 'FK: ' + column['comment'].split('FK: ', 1)[1]
+
+                metadata = dict(comment=comment,
                                 name=column['name'],
                                 type=column['type'],
                                 nullable=column['nullable'],
                                 primary_key=column['primary_key'],
                                 default=column['default'],
-                                comment=column['comment'])
+                                detail=detail)
                 table['columns'].append(metadata)
 
             table['indexes'] = []
@@ -106,8 +124,12 @@ class SimpleInspector(Inspector):
 
             table['foreign_keys'] = []
             for fkey in self.get_foreign_keys(table_name):
+
                 metadata = dict(name=fkey['name'],
-                                referred_table=fkey['referred_table'])
+                                constrained_columns=fkey['constrained_columns'],
+                                referred_table=fkey['referred_table'],
+                                referred_columns=fkey['referred_columns'],
+                                )
                 table['foreign_keys'].append(metadata)
 
             ret['tables'].append(table)
