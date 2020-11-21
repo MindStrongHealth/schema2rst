@@ -89,8 +89,6 @@ class RestructuredTextWriter:
 
     def listtable_column(self, columns):
         for i, column in enumerate(columns):
-            if isinstance(column, str):
-                column = self.conform_name(column)
             if i == 0:
                 self.println("   * - %s" % column)
             else:

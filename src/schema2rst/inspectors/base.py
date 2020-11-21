@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import re
+import json
 from sqlalchemy.engine.reflection import Inspector
 
 
@@ -84,35 +85,61 @@ class SimpleInspector(Inspector):
 
     def dump(self):
         ret = dict(name=self.engine.url.database, tables=[])
+        print("Getting tables...")
         for table in self.get_tables():
             table_name = table['name']
+            print(f"Processing table {table_name}")
 
             # rename table 'fullname' to 'comment'
             table['comment'] = table['fullname']
             table.pop('fullname',None)
 
             table['columns'] = []
+            table['fields'] = ["name","type","nullable","pkey","default"]
             col_map = {}
             for column in self.get_columns(table_name):
+                '''
+                .. note::
+
+                    * fullname comes back as the field name when comment is null
+                    * fullname is the field's comment if it exists
+                    * comment will contain the field's collation as well as any foreign keys
+
+                '''
+                metadata = dict(name=column['name'],
+                                type=column['type'],
+                                nullable=column['nullable'],
+                                pkey=column['primary_key'],
+                                default=column['default'])
+
+                fk = column['comment']
+                if 'FK' not in fk and 'auto_increment' not in fk:
+                    pass
+                elif 'FK' in fk:
+                    # potentially remove collation string
+                    metadata['fkey'] = 'FK: ' + fk.split('FK: ', 1)[1]
+
+                    if 'fkey' not in table['fields']:
+                        table['fields'].append('fkey')
+
                 if column['fullname'] == column['name']:
                     comment = ''
                 else:
                     comment = column['fullname']
 
-                detail = column['comment']
-                if 'FK' not in detail and 'auto_increment' not in detail:
-                    detail = ''
-                elif 'FK' in detail:
-                    # potentially remove collation string
-                    detail = 'FK: ' + column['comment'].split('FK: ', 1)[1]
+                if comment != '' and len(comment):
+                    try:
+                        comment = json.loads(comment)
+                        metadata = {**metadata, **comment}
+                        for f in sorted(comment.keys()):
+                            if f not in table['fields']:
+                                table['fields'].append(f)
+                    except json.decoder.JSONDecodeError:
+                        metadata["description"] = comment
 
-                metadata = dict(comment=comment,
-                                name=column['name'],
-                                type=column['type'],
-                                nullable=column['nullable'],
-                                primary_key=column['primary_key'],
-                                default=column['default'],
-                                detail=detail)
+                        if 'description' not in table['fields']:
+                            table['fields'].append('description')
+
                 table['columns'].append(metadata)
 
             table['indexes'] = []

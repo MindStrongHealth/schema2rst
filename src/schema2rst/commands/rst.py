@@ -61,28 +61,35 @@ def generate_doc(doc, schema):
 
         doc.header(schema['name'], table['name'], table['comment'], '-')
 
-        headers = ['Name', 'Type', 'NOT NULL',
-                   'PKey', 'Default', 'Detail', 'Comment']
+        headers = table['fields']
+
         doc.listtable(headers)
 
-        for ix,c in enumerate(table['columns']):
-
-            detail = c.get('detail')
-            if 'FK:' in detail:
+        for c in table['columns']:
+            fk = c.get('fkey', '')
+            if 'FK:' in fk:
                 # make hyperlink on referenced table
                 fks = []
-                for d in detail.replace('FK: ','').split(', '):
+                for d in fk.replace('FK: ','').split(', '):
                     t,_ = d.split('.')
                     fks.append(f"`{d} <#{t.replace('_','-')}>`_")
-                detail = ', '.join(fks)
+                fk = ', '.join(fks)
 
-            columns = [c.get('name'), c.get('type'),
-                       (not c.get('nullable')), c.get('primary_key'),
-                       c.get('default'), detail, c.get('comment')]
+            columns = []
+            for h in headers:
+                val = c.get(h)
+                if h == 'fkey':
+                    columns.append(fk)
+                elif h == 'nullable':
+                    columns.append(not c.get(h))
+                elif val is not None:
+                    columns.append(val)
+                else:
+                    columns.append('')
             doc.listtable_column(columns)
 
         if table['indexes']:
-            doc.title('Keys', '^')
+            doc.title('Indexes', '^')
             for index in table['indexes']:
                 if index['unique']:
                     format = "UNIQUE KEY: %s (%s)"
