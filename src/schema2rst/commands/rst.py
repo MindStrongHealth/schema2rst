@@ -15,6 +15,7 @@
 
 import io
 import sys
+import os
 import yaml
 import optparse
 from schema2rst import inspectors
@@ -51,52 +52,65 @@ def main(args=sys.argv[1:]):
         finally:
             engine.dispose()
 
-    doc = RestructuredTextWriter(options.output)
-    generate_doc(doc, schema)
+    schema_name = schema['name']
 
-def generate_doc(doc, schema):
-    doc.title(schema['name'])
+    if options.output:
+        doc = RestructuredTextWriter(options.output)
+        doc.title(schema['name'])
+        for table in schema['tables']:
+            generate_doc(doc, schema_name, table)
+    else:
 
-    for table in schema['tables']:
+        doc = RestructuredTextWriter(f"{schema_name}.rst")
+        doc.title(schema['name'])
+        doc.toctree([f"{schema_name}/{t['name']}" for t in schema['tables']], [":maxdepth: 1"])
 
-        doc.header(schema['name'], table['name'], table['comment'], '-')
+        if not os.path.exists(schema_name):
+            os.mkdir(schema_name)
+        for table in schema['tables']:
+            doc = RestructuredTextWriter(f"{schema_name}/{table['name']}.rst")
+            generate_doc(doc, schema['name'], table)
 
-        headers = table['fields']
+def generate_doc(doc, schema, table):
 
-        doc.listtable(headers)
+    doc.header(schema, table['name'], table['comment'], '-')
 
-        for c in table['columns']:
-            fk = c.get('fkey', '')
-            if 'FK:' in fk:
-                # make hyperlink on referenced table
-                fks = []
-                for d in fk.replace('FK: ','').split(', '):
-                    t,_ = d.split('.')
-                    fks.append(f"`{d} <#{t.replace('_','-')}>`_")
-                fk = ', '.join(fks)
+    headers = table['fields']
 
-            columns = []
-            for h in headers:
-                val = c.get(h)
-                if h == 'fkey':
-                    columns.append(fk)
-                elif h == 'nullable':
-                    columns.append(not c.get(h))
-                elif val is not None:
-                    columns.append(val)
-                else:
-                    columns.append('')
-            doc.listtable_column(columns)
+    doc.listtable(headers)
 
-        if table['indexes']:
-            doc.title('Indexes', '^')
-            for index in table['indexes']:
-                if index['unique']:
-                    format = "UNIQUE KEY: %s (%s)"
-                else:
-                    format = "KEY: %s (%s)"
+    for c in table['columns']:
+        fk = c.get('fkey', '')
+        if 'FK:' in fk:
+            # make hyperlink on referenced table
+            fks = []
+            for d in fk.replace('FK: ','').split(', '):
+                t,_ = d.split('.')
+                fks.append(f"`{d} <#{t.replace('_','-')}>`_")
+            fk = ', '.join(fks)
 
-                string = format % (index['name'],
-                                   ', '.join(index['column_names']))
-                doc.list_item(string)
+        columns = []
+        for h in headers:
+            val = c.get(h)
+            if h == 'fkey':
+                columns.append(fk)
+            elif h == 'nullable':
+                columns.append(not c.get(h))
+            elif val is not None:
+                columns.append(val)
+            else:
+                columns.append('')
+        doc.listtable_column(columns)
+
+    if table['indexes']:
+        doc.title('Indexes', '^')
+        for index in table['indexes']:
+            if index['unique']:
+                format = "UNIQUE KEY: %s (%s)"
+            else:
+                format = "KEY: %s (%s)"
+
+            string = format % (index['name'],
+                               ', '.join(index['column_names']))
+            doc.list_item(string)
 

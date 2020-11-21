@@ -23,14 +23,19 @@ This is example for MySQL Server::
    host: localhost
    user: username
    passwd: passw0rd
+   port: 3306
 
 `type` parameter is accept these values: mysql, mysql+pymysql, postgresql
 
 Usage
 =====
-Execute schema2rst command::
+Execute schema2rst command writing entire schema to a single RST::
 
    $ schema2rst -c config.yaml -o database.rst
+
+Execute schema2rst command writing each table of schema to individual RST::
+
+   $ schema2rst -c config.yaml
 
 Examples
 ========

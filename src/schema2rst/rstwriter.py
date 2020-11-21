@@ -44,8 +44,18 @@ class RestructuredTextWriter:
 
     @staticmethod
     def conform_name(n):
-        """Escape trailing underscores for sphinx"""
-        return re.sub(r"([_]+)$", r'\\\1', n)
+        """Escape trailing underscores for sphinx
+
+        Sphinx treates a trailing underscore as a hyperlink; some fields
+        or table names my have a trailing underscore. This escapes that
+        underscore so it doesn't hyperlink.
+
+        NOTE: this, as a consequence, will escape all hyperlinks. TOFIX
+        """
+        if type(n) == str:
+            return re.sub(r"([_]+)$", r'\\\1', n)
+        else:
+            return n
 
     def close(self):
         self.stream.close()
@@ -63,14 +73,16 @@ class RestructuredTextWriter:
     def header(self, schema, table, comment, char="="):
         """Table header"""
 
+        header = f"{schema}.{table}"
+
         table = self.conform_name(table)
-        ref = f".. _{schema}.{table}:"
+        ref = f".. _{header}:"
 
         self.println("")
         self.println(ref)
         self.println("")
-        self.println(table)
-        self.println(char * string_width(table))
+        self.println(header)
+        self.println(char * string_width(header))
         self.println("")
 
         if comment != '':
@@ -89,6 +101,7 @@ class RestructuredTextWriter:
 
     def listtable_column(self, columns):
         for i, column in enumerate(columns):
+            column = self.conform_name(column)
             if i == 0:
                 self.println("   * - %s" % column)
             else:
@@ -96,3 +109,14 @@ class RestructuredTextWriter:
 
     def list_item(self, item):
         self.println("* %s" % item)
+
+    def toctree(self, items, options=[]):
+        self.println(".. toctree::")
+
+        for option in options:
+            self.println(f"   {option}")
+
+        self.println("")
+        for item in items:
+            self.println(f"   {item}")
+
