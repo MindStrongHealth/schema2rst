@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import re
+import json
 from sqlalchemy.engine.reflection import Inspector
 
 
@@ -81,20 +82,64 @@ class SimpleInspector(Inspector):
 
         return columns
 
+
     def dump(self):
         ret = dict(name=self.engine.url.database, tables=[])
+        print("Getting tables...")
         for table in self.get_tables():
             table_name = table['name']
+            print(f"Processing table {table_name}")
+
+            # rename table 'fullname' to 'comment'
+            table['comment'] = table['fullname']
+            table.pop('fullname',None)
 
             table['columns'] = []
+            table['fields'] = ["name","type","nullable","pkey","default"]
+            col_map = {}
             for column in self.get_columns(table_name):
-                metadata = dict(fullname=column['fullname'],
-                                name=column['name'],
+                '''
+                .. note::
+
+                    * fullname comes back as the field name when comment is null
+                    * fullname is the field's comment if it exists
+                    * comment will contain the field's collation as well as any foreign keys
+
+                '''
+                metadata = dict(name=column['name'],
                                 type=column['type'],
                                 nullable=column['nullable'],
-                                primary_key=column['primary_key'],
-                                default=column['default'],
-                                comment=column['comment'])
+                                pkey=column['primary_key'],
+                                default=column['default'])
+
+                fk = column['comment']
+                if 'FK' not in fk and 'auto_increment' not in fk:
+                    pass
+                elif 'FK' in fk:
+                    # potentially remove collation string
+                    metadata['fkey'] = 'FK: ' + fk.split('FK: ', 1)[1]
+
+                    if 'fkey' not in table['fields']:
+                        table['fields'].append('fkey')
+
+                if column['fullname'] == column['name']:
+                    comment = ''
+                else:
+                    comment = column['fullname']
+
+                if comment != '' and len(comment):
+                    try:
+                        comment = json.loads(comment)
+                        metadata = {**metadata, **comment}
+                        for f in sorted(comment.keys()):
+                            if f not in table['fields']:
+                                table['fields'].append(f)
+                    except json.decoder.JSONDecodeError:
+                        metadata["description"] = comment
+
+                        if 'description' not in table['fields']:
+                            table['fields'].append('description')
+
                 table['columns'].append(metadata)
 
             table['indexes'] = []
@@ -106,8 +151,12 @@ class SimpleInspector(Inspector):
 
             table['foreign_keys'] = []
             for fkey in self.get_foreign_keys(table_name):
+
                 metadata = dict(name=fkey['name'],
-                                referred_table=fkey['referred_table'])
+                                constrained_columns=fkey['constrained_columns'],
+                                referred_table=fkey['referred_table'],
+                                referred_columns=fkey['referred_columns'],
+                                )
                 table['foreign_keys'].append(metadata)
 
             ret['tables'].append(table)

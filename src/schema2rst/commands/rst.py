@@ -15,6 +15,7 @@
 
 import io
 import sys
+import os
 import yaml
 import optparse
 from schema2rst import inspectors
@@ -45,45 +46,71 @@ def main(args=sys.argv[1:]):
         schema = yaml.safe_load(open(options.datafile))
     else:
         try:
-            config = yaml.load(io.open(options.config, encoding='utf-8'))
+            config = yaml.safe_load(io.open(options.config, encoding='utf-8'))
             engine = inspectors.create_engine(config)
             schema = inspectors.create_for(engine).dump()
         finally:
             engine.dispose()
 
-    doc = RestructuredTextWriter(options.output)
-    generate_doc(doc, schema)
+    schema_name = schema['name']
 
+    if options.output:
+        doc = RestructuredTextWriter(options.output)
+        doc.title(schema['name'])
+        for table in schema['tables']:
+            generate_doc(doc, schema_name, table)
+    else:
 
-def generate_doc(doc, schema):
-    doc.header('Schema: %s' % schema['name'])
+        doc = RestructuredTextWriter(f"{schema_name}.rst")
+        doc.title(schema['name'])
+        doc.toctree([f"{schema_name}/{t['name']}" for t in schema['tables']], [":maxdepth: 1"])
 
-    for table in schema['tables']:
-        # FIXME: support fullname (table comment)
-        if table['fullname']:
-            doc.header("%s (%s)" %
-                       (table['fullname'], table['name']), '-')
-        else:
-            doc.header(table['name'], '-')
+        if not os.path.exists(schema_name):
+            os.mkdir(schema_name)
+        for table in schema['tables']:
+            doc = RestructuredTextWriter(f"{schema_name}/{table['name']}.rst")
+            generate_doc(doc, schema['name'], table)
 
-        headers = ['Fullname', 'Name', 'Type', 'NOT NULL',
-                   'PKey', 'Default', 'Comment']
-        doc.listtable(headers)
+def generate_doc(doc, schema, table):
 
-        for c in table['columns']:
-            columns = [c.get('fullname'), c.get('name'), c.get('type'),
-                       (not c.get('nullable')), c.get('primary_key'),
-                       c.get('default'), c.get('comment')]
-            doc.listtable_column(columns)
+    doc.header(schema, table['name'], table['comment'], '-')
 
-        if table['indexes']:
-            doc.header('Keys', '^')
-            for index in table['indexes']:
-                if index['unique']:
-                    format = "UNIQUE KEY: %s (%s)"
-                else:
-                    format = "KEY: %s (%s)"
+    headers = table['fields']
 
-                string = format % (index['name'],
-                                   ', '.join(index['column_names']))
-                doc.list_item(string)
+    doc.listtable(headers)
+
+    for c in table['columns']:
+        fk = c.get('fkey', '')
+        if 'FK:' in fk:
+            # make hyperlink on referenced table
+            fks = []
+            for d in fk.replace('FK: ','').split(', '):
+                t,_ = d.split('.')
+                fks.append(f"`{d} <#{t.replace('_','-')}>`_")
+            fk = ', '.join(fks)
+
+        columns = []
+        for h in headers:
+            val = c.get(h)
+            if h == 'fkey':
+                columns.append(fk)
+            elif h == 'nullable':
+                columns.append(not c.get(h))
+            elif val is not None:
+                columns.append(val)
+            else:
+                columns.append('')
+        doc.listtable_column(columns)
+
+    if table['indexes']:
+        doc.title('Indexes', '^')
+        for index in table['indexes']:
+            if index['unique']:
+                format = "UNIQUE KEY: %s (%s)"
+            else:
+                format = "KEY: %s (%s)"
+
+            string = format % (index['name'],
+                               ', '.join(index['column_names']))
+            doc.list_item(string)
+

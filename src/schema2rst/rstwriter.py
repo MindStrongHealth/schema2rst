@@ -14,6 +14,7 @@
 #  limitations under the License.
 
 import io
+import re
 import six
 import sys
 import unicodedata
@@ -41,17 +42,52 @@ class RestructuredTextWriter:
         else:
             self.stream = io.open(sys.stdout.fileno(), 'w', encoding='utf-8')
 
+    @staticmethod
+    def conform_name(n):
+        """Escape trailing underscores for sphinx
+
+        Sphinx treates a trailing underscore as a hyperlink; some fields
+        or table names my have a trailing underscore. This escapes that
+        underscore so it doesn't hyperlink.
+
+        NOTE: this, as a consequence, will escape all hyperlinks. TOFIX
+        """
+        if type(n) == str:
+            return re.sub(r"([_]+)$", r'\\\1', n)
+        else:
+            return n
+
     def close(self):
         self.stream.close()
 
     def println(self, string):
         self.stream.write(string + six.u("\n"))
 
-    def header(self, string, char="="):
+    def title(self, title, char="="):
+
         self.println("")
-        self.println(string)
-        self.println(char * string_width(string))
+        self.println(title)
+        self.println(char * string_width(title))
         self.println("")
+
+    def header(self, schema, table, comment, char="="):
+        """Table header"""
+
+        header = f"{schema}.{table}"
+
+        table = self.conform_name(table)
+        ref = f".. _{header}:"
+
+        self.println("")
+        self.println(ref)
+        self.println("")
+        self.println(header)
+        self.println(char * string_width(header))
+        self.println("")
+
+        if comment != '':
+            self.println(comment)
+            self.println("")
 
     def listtable(self, header=None):
         self.println(".. list-table::")
@@ -65,6 +101,7 @@ class RestructuredTextWriter:
 
     def listtable_column(self, columns):
         for i, column in enumerate(columns):
+            column = self.conform_name(column)
             if i == 0:
                 self.println("   * - %s" % column)
             else:
@@ -72,3 +109,14 @@ class RestructuredTextWriter:
 
     def list_item(self, item):
         self.println("* %s" % item)
+
+    def toctree(self, items, options=[]):
+        self.println(".. toctree::")
+
+        for option in options:
+            self.println(f"   {option}")
+
+        self.println("")
+        for item in items:
+            self.println(f"   {item}")
+
