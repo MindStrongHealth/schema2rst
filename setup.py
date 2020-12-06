@@ -2,7 +2,7 @@
 import sys
 from setuptools import setup, find_packages
 
-version = '0.9.0'
+version = '0.9.1'
 long_description = ''
 
 classifiers = [
