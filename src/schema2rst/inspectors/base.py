@@ -85,10 +85,8 @@ class SimpleInspector(Inspector):
 
     def dump(self):
         ret = dict(name=self.engine.url.database, tables=[])
-        print("Getting tables...")
         for table in self.get_tables():
             table_name = table['name']
-            print(f"Processing table {table_name}")
 
             # rename table 'fullname' to 'comment'
             table['comment'] = table['fullname']
